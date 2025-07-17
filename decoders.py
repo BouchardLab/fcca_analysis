@@ -94,10 +94,11 @@ def standardize(X):
     scaler = StandardScaler()
 
     if type(X) == list:
-        Xstd = [scaler.fit_transform(x) for x in X] 
+        #Xstd = [scaler.fit_transform(x) for x in X] 
+        Xstd = [scaler.fit_transform(np.asarray(x)) if len(x) > 0 else np.array([]) for x in X]
+
     elif np.ndim(X) == 3:
-        Xstd = np.array([scaler.fit_transform(X[idx, ...]) 
-                         for idx in range(X.shape[0])])
+        Xstd = np.array([scaler.fit_transform(X[idx, ...]) for idx in range(X.shape[0])])
     else:
         Xstd = scaler.fit_transform(X)
 
@@ -164,6 +165,7 @@ def lr_preprocess(Xtest, Xtrain, Ztest, Ztrain, trainlag, testlag, decoding_wind
     # Apply decoding window
     Xtrain = [form_lag_matrix(x, decoding_window) for x in Xtrain]
     Xtest = [form_lag_matrix(x, decoding_window) for x in Xtest]
+
 
     Ztrain = [z[decoding_window//2:, :] for z in Ztrain]
     Ztrain = [z[:x.shape[0], :] for z, x in zip(Ztrain, Xtrain)]

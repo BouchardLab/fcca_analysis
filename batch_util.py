@@ -6,6 +6,7 @@ import importlib
 import itertools
 import pickle
 import pdb
+from datetime import datetime
 
 # Load all the arg files in path and replace the data_file, data_path, and results_file paths
 def rename_directories(path, new_root_path, new_data_path):
@@ -27,26 +28,36 @@ def rename_directories(path, new_root_path, new_data_path):
 def launch_batch(jobdir: str, sbatch_name: str = "sbatch_resume.sh"):
     sbatch_path = os.path.join(jobdir, sbatch_name)
 
-    # Prepend conda activation to the sbatch script if not already present
+    # Ensure Conda environment activation is in the script
     with open(sbatch_path, 'r') as f:
         lines = f.readlines()
 
     conda_setup = [
-    "# Activate conda environment\n",
-    "eval \"$(conda shell.bash hook)\"\n",
-    "conda activate ncontrol\n"
-    ]   
+        "# Activate conda environment\n",
+        "eval \"$(conda shell.bash hook)\"\n",
+        "conda activate ncontrol\n",
+    ]
 
-    if "conda activate ncontrol" not in ''.join(lines):
-        lines = lines[:1] + conda_setup + lines[1:]
+    if not any("conda activate ncontrol" in line for line in lines):
+        # Insert after the shebang
+        if lines and lines[0].startswith("#!"):
+            lines = [lines[0]] + conda_setup + lines[1:]
+        else:
+            lines = conda_setup + lines
+
         with open(sbatch_path, 'w') as f:
             f.writelines(lines)
 
-    os.chmod(sbatch_path, 0o755)  # Make it executable
+    os.chmod(sbatch_path, 0o755)
 
-    # Launch in background
     log_path = os.path.join(jobdir, "log.txt")
-    nohup_cmd = f"cd {jobdir} && nohup ./{sbatch_name} > {log_path} 2>&1 &"
+
+    with open(log_path, 'a') as log:
+        log.write("\n" + "="*60 + "\n")
+        log.write(f" Relaunch at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \n")
+        log.write("="*60 + "\n")
+
+    nohup_cmd = f"cd {jobdir} && nohup ./{sbatch_name} >> {log_path} 2>&1 &"
     os.system(nohup_cmd)
 
     return f"Launched {sbatch_name} in background with output to {log_path}"
@@ -99,6 +110,8 @@ def gen_sbatch(arg_array, sbatch_params, local=False,
                     arg_file = '%s/arg%d.dat' % (jobdir, sbatch_params['jobnos'][i])
                     cmd_args0 = ' '.join([' --%s=%s ' % (key, value) for key, value in sbatch_params['cmd_args0'].items()])
                     cmd_args1 = ' '.join([' --%s ' % key for key, value in sbatch_params['cmd_args1'].items() if value]) 
+                    
+                    sb.write(f'echo "Starting {os.path.basename(arg_file)}"\n')
                     sb.write('mpirun -n 24 python3 -u %s %s%s%s\n' % (sbatch_params['script_path'], arg_file, cmd_args0, cmd_args1))
                 
         else:
@@ -117,6 +130,11 @@ def gen_sbatch(arg_array, sbatch_params, local=False,
 
             sb.write('source ~/anaconda3/bin/activate\n')
             sb.write('source activate dyn\n')
+
+            # MIH
+            sb.write('echo "Which Python: $(which python)"\n')
+            sb.write('python -c "import sys; print(\'Python version:\', sys.version)"\n')
+            sb.write('python -c "import numpy; print(\'Numpy version:\', numpy.__version__)"\n')
 
             # Critical to prevent threads competing for resources
             sb.write('export OMP_NUM_THREADS=1\n')

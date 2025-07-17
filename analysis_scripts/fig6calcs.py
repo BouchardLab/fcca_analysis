@@ -103,8 +103,7 @@ def calc_on_dimreduc(T, decoding_df, region, session_key, DIM):
 
             results.append(result_)
 
-            pdb.set_trace()
-    save_path = PATH_DICT['tmp'] + '/jpca_tmp_dimreduc_{region}_dim{DIM}_T{T}.pkl'    
+    save_path = PATH_DICT['tmp'] + f'/jpca_tmp_dimreduc_{region}_dim{DIM}_T{T}.pkl'    
     with open(save_path, 'wb') as f:
         f.write(pickle.dumps(results))                
 
@@ -164,60 +163,29 @@ def calc_on_random(T, decoding_df, region, session_key, DIM, inner_reps):
     with open(save_path, 'wb') as f:
         f.write(pickle.dumps(results))                
 
-dim_dict = {
-    'M1': 6,
-    'M1_trialized':6,
-    'S1': 6,
-    'HPC_peanut': 11,
-    'M1_maze': 6,
-    'AM': 21,
-    'ML': 21,
-    'mPFC':15,
-    'HPC':15,
-    'VISp':10,
-    'organoids':10
-}
-
 T_dict = {
     'M1': 20,
-    'M1_trialized': 20,
     'S1': 20,
     'HPC_peanut': 40,
-    'M1_maze': 20,
-    'AM': 12, #18,
-    'ML': 12, #18
-    'HPC': 12, 
-    'mPFC': 12,
     'VISp': 14,
-    'organoids' : 14
 }
+
+dim_dict =  {
+        'M1': 6,
+        'S1': 6,
+        'HPC_peanut': 6,
+        'VISp': 6
+    }
 
 if __name__ == '__main__':
 
     regions = ['M1', 'S1', 'HPC_peanut', 'VISp']
-    dim_dicts = [
-        {
-            'M1': 6,
-            'S1': 6,
-            'HPC_peanut': 11,
-            'VISp': 10
-        },
-        {
-            'M1': 6,
-            'S1': 6,
-            'HPC_peanut': 6,
-            'VISp': 6
-        }
-    ]
 
-    #regions = ['AM', 'ML']
-    regions = ['organoids']
     print("Beginning..")
     for region in regions:
-        for dim_dict_ in dim_dicts:
-            T = T_dict[region]
-            inner_reps = 1000
-            decoding_df, session_key = load_decoding_df(region, **loader_kwargs[region])
-            calc_on_dimreduc(T, decoding_df, region, session_key, dim_dict_[region])
-            calc_on_random(T, decoding_df, region, session_key, dim_dict_[region], inner_reps)
-            print(f"Done with {region}")
+        T = T_dict[region]
+        inner_reps = 1000
+        decoding_df, session_key = load_decoding_df(region, **loader_kwargs[region])
+        calc_on_dimreduc(T, decoding_df, region, session_key, dim_dict[region])
+        calc_on_random(T, decoding_df, region, session_key, dim_dict[region], inner_reps)
+        print(f"Done with {region}")

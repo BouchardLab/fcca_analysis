@@ -1,57 +1,23 @@
 import numpy as np
 import scipy
 import sys
-import pdb
 import matplotlib.pyplot as plt
-from glob import glob
-import pickle
 from tqdm import tqdm
-import pandas as pd
-from copy import deepcopy
-from sklearn.model_selection import KFold
 
 from region_select import load_decoding_df, apply_df_filters, loader_kwargs
 from config import PATH_DICT
 sys.path.append(PATH_DICT['repo'])
 
-# Keep it at d=6 for this first plot
-dim_dict = {
-    'M1': 6,
-    'S1': 6,
-    'M1_trialized':6,
-    'HPC_peanut': 6,
-    'M1_maze':6,
-    'AM': 21,
-    'ML': 21,
-    'mPFC': 15,
-    'VISp': 6,
-    'organoids':10
-}
-
-# for neurips
-# dim_dict = {
-#     'M1': 2,
-#     'S1': 2,
-#     'HPC_peanut': 2,
-#     'VISp': 2,
-#     'M1_maze': 2
-# }
+dim = 6
 
 if __name__ == '__main__':
 
-    # # # Where to save?
-    # if len(sys.argv) > 1:
-    #     figpath = sys.argv[1]
-    # else:
-    #     # figpath = '/home/akumar/nse/neural_control/figs/revisions'
-
     figpath = PATH_DICT['figs']
-    regions = ['M1', 'S1', 'HPC_peanut', 'M1_maze']
+    regions = ['M1_psid', 'S1_psid', 'HPC_peanut', 'VISp']
 
     for region in tqdm(regions):
         df, session_key = load_decoding_df(region, **loader_kwargs[region])
         
-        dim = dim_dict[region]
         sessions = np.unique(df[session_key].values)
         ss_angles = np.zeros((len(sessions), 5, dim))
         folds = np.arange(5)
@@ -67,27 +33,6 @@ if __name__ == '__main__':
                 assert(dffcca.shape[0] == 1)
                 
                 ss_angles[i, f, :] = scipy.linalg.subspace_angles(dfpca.iloc[0]['coef'][:, 0:dim], dffcca.iloc[0]['coef'])
-
-                # print('Calculating subspace angles between random projections...')
-                # nrand = int(1e3)
-                # rand = np.random.default_rng(42)
-                # orth = scipy.stats.ortho_group
-                # orth.random_state = rand
-                # U = orth.rvs(dfpca.iloc[0]['coef'].shape[0], size=nrand)
-                # U = U[..., 0:dim]
-                # ss_angles = np.zeros((nrand, nrand, dim))
-                # svd = np.zeros((nrand, nrand, 2 * dim))
-
-                # Ujoint = []
-                # print(U.shape)
-                # for k1 in tqdm(range(nrand)):
-                #     for k2 in range(nrand):
-                #         ss_angles[k1, k2] = scipy.linalg.subspace_angles(U[k1], U[k2])
-                #         joint_proj = np.hstack([U[k1], U[k2]])
-                #         s = np.linalg.svd(joint_proj, compute_uv=False)
-                #         svd[k1, k2] = s
-
-                # pdb.set_trace()
 
         fig, ax = plt.subplots(figsize=(1, 4))
         medianprops = {'linewidth':0}

@@ -1,14 +1,5 @@
-import os
-
-# What is the root path of the neural control repo?
-user = os.getlogin()
-if user == 'ankit_kumar':
-    repo_root_path = '/home/ankit_kumar/tmp/neural_control/' 
-elif user == 'marcush':
-    repo_root_path = '/home/marcush/projects/neural_control/' 
-#repo_root_path = '/home/ankit_kumar/neural_control'
-#repo_root_path = '/home/marcush/projects/neural_control'
-
+# What is the root path of the fcca_analysis repo?
+repo_root_path = '/home/ankit_kumar/fcca_analysis'
 
 # Where is the neural data stored?
 data_root_path = '/clusterfs/NSDS_data/FCCA/data'
@@ -17,14 +8,10 @@ data_root_path = '/clusterfs/NSDS_data/FCCA/data'
 df_root_path = '/clusterfs/NSDS_data/FCCA/postprocessed'
 
 # Where should tmp outputs of analysis scripts be stored/looked for?
-tmp_root_path = '/clusterfs/NSDS_data/FCCA/tmp'
-#tmp_root_path = '/clusterfs/NSDS_data/FCCA/tmp_MIH_FOB' #tmp_MIH
-
+tmp_root_path = '/clusterfs/NSDS_data/FCCA/tmp_reproduction'
 
 # Where should figures be saved to?
-fig_path = '/clusterfs/NSDS_data/FCCA/figs'
-#fig_path = '/clusterfs/NSDS_data/FCCA/Figs_MIH'
-
+fig_path = '/clusterfs/NSDS_data/FCCA/figs_reproduction'
 
 # Where are SOC results located?
 soc_path = '/clusterfs/NSDS_data/FCCA/soc'
@@ -41,7 +28,3 @@ PATH_DICT = {
     'soc': soc_path,
     'rnn': rnn_path
 }
-
-# Which regions should we run analysis on?
-
-# Which analyses should we run?

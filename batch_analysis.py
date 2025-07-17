@@ -4,27 +4,25 @@ import argparse
 import pickle
 import glob
 import itertools
+import re
 import numpy as np
- 
+
 from mpi_utils.ndarray import Bcast_from_root
 from sklearn.model_selection import KFold
 
 # ------------------------------------------------------------------ Custom Built Packages
-from mpi_loaders import mpi_load_shenoy
 from dimreduc_wrappers import PCA_wrapper, NoDimreduc, RandomDimreduc
-from loaders import (load_sabes, load_shenoy, load_peanut,  load_cv, load_shenoy_large, load_sabes_trialized, load_franklab_new, load_tsao, load_AllenVC, load_organoids)
+from loaders import (load_sabes, load_peanut, load_sabes_trialized, load_AllenVC)
 from decoders import (lr_decoder, rrlr_decoder, logreg, lr_residual_decoder, svm_decoder, psid_decoder)
 try:
     from FCCA.fcca import FCCA as LQGCA
 except:
     from FCCA_private.FCCA.fcca import LQGComponentsAnalysis as LQGCA
 
+
 # ------------------------------------------------------------------ Reference Dictionaries
-LOADER_DICT = {'sabes': load_sabes, 'shenoy': mpi_load_shenoy, 'peanut': load_peanut, 'cv':load_cv,
-                'mc_maze':load_shenoy_large, 'sabes_trialized': load_sabes_trialized,
-                'franklab_new':load_franklab_new, 'tsao':load_tsao, 'AllenVC':load_AllenVC, 'load_organoids':load_organoids}
-DECODER_DICT = {'lr': lr_decoder, 'lr_residual': lr_residual_decoder,
-                'svm':svm_decoder, 'psid':psid_decoder, 'rrlr': rrlr_decoder, 'logreg':logreg}
+LOADER_DICT = {'sabes': load_sabes, 'peanut': load_peanut, 'sabes_trialized': load_sabes_trialized, 'AllenVC':load_AllenVC}
+DECODER_DICT = {'lr': lr_decoder, 'lr_residual': lr_residual_decoder, 'svm':svm_decoder, 'psid':psid_decoder, 'rrlr': rrlr_decoder, 'logreg':logreg}
 DIMREDUC_DICT = {'PCA': PCA_wrapper, 'LQGCA': LQGCA, 'None':NoDimreduc, 'Random': RandomDimreduc}
 
 
@@ -60,14 +58,14 @@ def prune_tasks(tasks, results_folder, task_format):
     to_do = []
     for task in tasks:
         if task_format == 'dimreduc':
-            train_test_tuple, dim, _, _, _ = task
+            _, _, train_test_tuple, dim, _, _, _ = task
             fold_idx, _, _ = train_test_tuple
 
             if (dim, fold_idx) not in param_tuples:
                 to_do.append(task)
 
         elif task_format == 'decoding':
-            dim, fold_idx, _, _, _ = task
+            _, _, dim, fold_idx, _, _, _ = task
 
             if (dim, fold_idx) not in param_tuples:
                 to_do.append(task)
@@ -122,9 +120,10 @@ class PoolWorker():
         
         task_tuple, comm = task_tuple if len(task_tuple) == 2 else (task_tuple, None)            
 
-        train_test_tuple, dim, method, method_args, results_folder = task_tuple
+        #train_test_tuple, dim, method, method_args, results_folder = task_tuple
+        task_idx, total_tasks, train_test_tuple, dim, method, method_args, results_folder = task_tuple
         fold_idx, train_idxs, test_idxs = train_test_tuple
-        print('Method: %s, Dimension: %d, Fold Index: %d' % (method, dim, fold_idx))
+        print(f"[Task {task_idx+1}/{total_tasks}] Method: {method}, Dim: {dim}, Fold: {fold_idx}")
 
         
         X = globals()['X'] # X is either of shape (n_time, n_dof) or (n_trials,) 
@@ -171,11 +170,9 @@ class PoolWorker():
     def decoding(self, task_tuple):
 
         task_tuple, comm = task_tuple if len(task_tuple) == 2 else (task_tuple, None)              
+        task_idx, total_tasks, dim_val, fold_idx, dimreduc_results, decoder, results_folder = task_tuple
 
-        dim_val, fold_idx, dimreduc_results, decoder, results_folder = task_tuple
-        #print('Working on %d, %d' % (dim_val, fold_idx))
-        print('Decoder: %s, Dimension: %d, Fold Index: %d' % (decoder, dim_val, fold_idx))
-
+        print(f"[Task {task_idx+1}/{total_tasks}] Decoder: {decoder['method']}, Dim: {dim_val}, Fold: {fold_idx}")
         coef_ = dimreduc_results['coef']
 
 
@@ -190,6 +187,7 @@ class PoolWorker():
         Xtrain = X[train_idxs]
         Xtest = X[test_idxs]
 
+                
         if dim_val <= 0:
             dim_val = Xtrain.shape[-1] if np.ndim(Xtrain) == 2 else Xtrain[0].shape[-1]
         
@@ -206,7 +204,7 @@ class PoolWorker():
                 Xtest_ = Xtest @ cf if np.ndim(Xtest) == 2 else [xx @ cf for xx in Xtest]
                 Ytrain_, Ytest_ = list(Ytrain), list(Ytest)
                 
-                results = DECODER_DICT[decoder['method']](Xtest_, Xtrain_, Ytest, Ytrain, **decoder['args'])
+                results = DECODER_DICT[decoder['method']](Xtest_, Xtrain_, Ytest_, Ytrain_, **decoder['args'])
                 results_dict = {**dimreduc_results, **results}
                 results_dict.update({'dim': dim_val, 'fold_idx': fold_idx, 'decoder': decoder['method'], 'decoder_args': decoder['args'] })
                 results_dict_list.append(results_dict)
@@ -283,7 +281,10 @@ def dimreduc_(dim_vals, n_folds, comm, method, method_args, results_file, resume
 
         # Create data task list
         data_tasks = [(idx,) + train_test_split for idx, train_test_split in enumerate(train_test_idxs)]   
-        tasks = [task + (method, method_args, results_folder) for task in itertools.product(data_tasks, dim_vals)]
+        task_list = list(itertools.product(data_tasks, dim_vals))
+        total_tasks = len(task_list)
+        tasks = [(i, total_tasks, *task, method, method_args, results_folder) for i, task in enumerate(task_list)]
+        
         if resume: tasks = prune_tasks(tasks, results_folder, 'dimreduc')
 
     else:
@@ -295,15 +296,11 @@ def dimreduc_(dim_vals, n_folds, comm, method, method_args, results_file, resume
     #pool = MPIPool(comm) if comm else SerialPool()
    #if comm is not None: tasks = comm.bcast(tasks)
     
-    print('%d Tasks Remaining' % len(tasks))
-
     if comm is None:
-        print("Running tasks serially...")
         worker = PoolWorker()
         for task in tasks:
             worker.dimreduc(task)
     else:
-        print("Running tasks with MPIPool...")
         from schwimmbad import MPIPool
         pool = MPIPool(comm)
         if len(tasks) > 0:
@@ -328,27 +325,20 @@ def decoding_(dimreduc_file, decoder, data_path,
         if not os.path.exists(results_folder):
             os.makedirs(results_folder)
 
-
     # Look for an arg file in the same folder as the dimreduc_file
     dimreduc_path = '/'.join(dimreduc_file.split('/')[:-1])
     dimreduc_fileno = int(dimreduc_file.split('_')[-1].split('.dat')[0])
     argfile_path = '%s/arg%d.dat' % (dimreduc_path, dimreduc_fileno)
 
+
     # Dimreduc args provide loader information
     with open(argfile_path, 'rb') as f:
         args = pickle.load(f) 
 
-    data_file_name = args['data_file'].split('/')[-1]
-    data_file_path = '%s/%s' % (data_path, data_file_name)
-
-    # Don't do this one
-    if data_file_name == 'trialtype0.dat':
-        return
 
     if loader_args is not None:
         load_data(args['loader'], args['data_file'], loader_args, comm, broadcast_behavior=True)
     else:
-        # Uses dimreduc loader args
         load_data(args['loader'], args['data_file'], args['loader_args'], comm, broadcast_behavior=True)
     
     if comm is None:
@@ -363,10 +353,11 @@ def decoding_(dimreduc_file, decoder, data_path,
 
         dim_fold_tuples = [(result['dim'], result['fold_idx']) for result in dimreduc_results]
 
-        for i in range(len(tasks)):
-            # Find the index in dimreduc_results that matches the fold_idx and dim_vals of the corresponding task
-            dimreduc_idx = dim_fold_tuples.index((tasks[i][0], tasks[i][1]))
-            tasks[i] += (dimreduc_results[dimreduc_idx], decoder, results_folder)
+        task_list = []
+        for i, (dim_val, fold_idx) in enumerate(itertools.product(dim_vals, fold_idxs)):
+            dimreduc_idx = dim_fold_tuples.index((dim_val, fold_idx))
+            task_list.append((i, len(dim_vals)*len(fold_idxs), dim_val, fold_idx, dimreduc_results[dimreduc_idx], decoder, results_folder))
+        tasks = task_list
 
         if resume:
             tasks = prune_tasks(tasks, results_folder, 'decoding')
@@ -383,10 +374,13 @@ def decoding_(dimreduc_file, decoder, data_path,
             tasks = list(itertools.product(dim_vals, fold_idxs))
             fold_idxs = np.arange(n_folds)
             dim_fold_tuples = [(result['dim'], result['fold_idx']) for result in dimreduc_results]
-            for i in range(len(tasks)):
-                # Find the index in dimreduc_results that matches the fold_idx and dim_vals of the corresponding task
-                dimreduc_idx = dim_fold_tuples.index((tasks[i][0], tasks[i][1]))
-                tasks[i] += (dimreduc_results[dimreduc_idx], decoder, results_folder)
+
+
+            task_list = []
+            for i, (dim_val, fold_idx) in enumerate(itertools.product(dim_vals, fold_idxs)):
+                dimreduc_idx = dim_fold_tuples.index((dim_val, fold_idx))
+                task_list.append((i, len(dim_vals)*len(fold_idxs), dim_val, fold_idx, dimreduc_results[dimreduc_idx], decoder, results_folder))
+            tasks = task_list
 
             if resume:
                 tasks = prune_tasks(tasks, results_folder, 'decoding')
@@ -400,23 +394,12 @@ def decoding_(dimreduc_file, decoder, data_path,
     worker = PoolWorker()
 
     # VERY IMPORTANT: Once pool is created, the workers wait for instructions, so must proceed directly to map
-    """    if comm is not None:
-        tasks = comm.bcast(tasks)
-        print('%d Tasks Remaining' % len(tasks))
-        pool = MPIPool(comm) #, subgroups=split_ranks)
-    else:
-        pool = SerialPool()
 
-    if len(tasks) > 0:
-        pool.map(worker.decoding, tasks)
-    pool.close()"""
     if comm is not None and comm.Get_size() > 1:
         tasks = comm.bcast(tasks)
-        print('%d Tasks Remaining' % len(tasks))
         from schwimmbad import MPIPool
         pool = MPIPool(comm)
     else:
-        print('%d Tasks Remaining' % len(tasks))
         from schwimmbad import SerialPool
         pool = SerialPool()
 
@@ -457,6 +440,7 @@ def main(cmd_args, args):
     elif cmd_args.analysis_type == 'decoding':
         
         decoding_loader_args = args['loader_args'] if args['loader_args'] else None
+
         decoding_(dimreduc_file=args['task_args']['dimreduc_file'], 
                   decoder=args['task_args']['decoder'],
                   data_path = args['data_path'], comm=comm, 

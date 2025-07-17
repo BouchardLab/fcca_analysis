@@ -411,7 +411,6 @@ def postprocess_spikes(spike_times, T, bin_width, boxcox, filter_fn, filter_kwar
         spike_rates = [np.array([spike_rates[i, j] for j in range(spike_rates.shape[1])]).T for i in range(spike_rates.shape[0])]
     else:
         # Filter the resulting spike counts
-        print('FILTERING SPIKE RATES!')
         spike_rates = FILTER_DICT[filter_fn](spike_rates, **filter_kwargs)
         # High pass to remove long term trends (needed for sabes data)
         if high_pass:
@@ -447,7 +446,7 @@ def load_sabes_trialized(filename, min_length=6, **kwargs):
 def load_sabes(filename, bin_width=50, boxcox=0.5, filter_fn='none', filter_kwargs={}, spike_threshold=100,
                std_behavior=False, region='M1', high_pass=True, segment=False, return_wf=False, 
                subset=None, truncate_start=False, **kwargs):
-    print('Starting loading')
+    print('Start loading Sabes data...')
     # Convert bin width to s
     bin_width /= 1000
 
@@ -473,7 +472,6 @@ def load_sabes(filename, bin_width=50, boxcox=0.5, filter_fn='none', filter_kwar
             indices = M1_indices
         elif region == 'S1':
             indices = S1_indices
-            print(len(indices))
         elif region == 'both':
             indices = list(range(n_channels))
 
@@ -586,7 +584,6 @@ def load_sabes_wf(filename, spike_threshold=100, region='M1'):
             indices = M1_indices
         elif region == 'S1':
             indices = S1_indices
-            print(len(indices))
         elif region == 'both':
             indices = list(range(n_channels))
 

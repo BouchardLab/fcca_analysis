@@ -19,7 +19,7 @@ sys.path.append(PATH_DICT['repo'])
 from utils import calc_loadings
 from region_select import *
 from Fig4 import get_loadings_df
-from analysis_scripts.Fig3_decoding import get_decoding_performance
+from Fig3_decoding import get_decoding_performance
 
 def get_su_calcs(region):
     if region in ['M1_psid', 'S1_psid']:
@@ -35,16 +35,11 @@ def get_su_calcs(region):
 def get_marginal_dfs(region):
     # Fill in directories for marginals:
     root_path = PATH_DICT['df']
+
+    if region in ['M1', 'S1']:
+        region = region + '_psid'
+
     if region == 'M1_psid':
-        # with open(root_path + '/indy_decoding_marginal.dat', 'rb') as f:
-        #     rl = pickle.load(f)
-        # indy_mdf = pd.DataFrame(rl)
-
-        # with open(root_path + '/loco_decoding_marginal_df.dat', 'rb') as f:
-        #     rl = pickle.load(f)
-        # loco_mdf = pd.DataFrame(rl)
-        # marginals_df = pd.concat([indy_mdf, loco_mdf])
-
         with open(root_path + '/sabes_marginal_psid_df.pkl', 'rb') as f:
             rl = pickle.load(f)
         df = pd.DataFrame(rl)
@@ -63,8 +58,6 @@ def get_marginal_dfs(region):
         filt = [idx for idx in range(df.shape[0]) 
                 if df.iloc[idx]['loader_args']['subset'] is None and df.iloc[idx]['loader_args']['truncate_start'] is True]
         marginals_df = df.iloc[filt]
-    elif region == 'M1_trialized':
-        raise NotImplementedError
     elif region == 'HPC_peanut':
         with open(root_path + '/peanut_marginal_decoding25_df.pkl', 'rb') as f:
             rl = pickle.load(f)
@@ -85,40 +78,6 @@ def get_marginal_dfs(region):
         epochs = [marginals_df.iloc[k]['loader_args']['epoch'] for k in range(marginals_df.shape[0])]
         marginals_df['epoch'] = epochs
 
-    elif region == 'M1_maze':
-        with open(root_path + '/mcmaze_marginal_decoding_df.pkl', 'rb') as f:
-            rl = pickle.load(f)
-        marginals_df = pd.DataFrame(rl)
-        
-        # Hard-coded match to the non-marginal mc maze arguments
-        loader_args = {'bin_width':50, 'filter_fn':'none', 'filter_kwargs':{}, 'boxcox':0.5, 'spike_threshold':1,
-        'trialize':True, 'interval':'after_go', 'trial_threshold':0.5} 
-        decoder_args = {'trainlag': 3, 'testlag': 3, 'decoding_window':5}
-        marginals_df = apply_df_filters(marginals_df, loader_args=loader_args, decoder_args = decoder_args)
-    elif region in ['AM', 'ML']:
-        marginals_path = root_path + '/tsao_marginal_decode_df.pkl'
-        #marginals_path = root_path + '/tsao_decode_df_clearOnly_marginals.pkl' #'/tsao_decode_df_degOnly_marginals.pkl'
-        
-        
-        with open(marginals_path, 'rb') as f:
-            rl = pickle.load(f)
-        marginals_df = pd.DataFrame(rl)
-        marginals_df = apply_df_filters(marginals_df, loader_args={'region': region})
-        
-    elif region in ['HPC', 'mPFC']:
-        
-        marginals_path = root_path + '/decoding_fullarg_frank_lab_marginals_glom.pickle'
-        
-        with open(marginals_path, 'rb') as f:
-            rl = pickle.load(f)
-        marginals_df = pd.DataFrame(rl)
-        
-        load_idx, dec_idx, dr_idx = loader_kwargs[region].values()
-        loader_args, decoder_args, dimreduc_args = get_franklab_args(load_idx, dec_idx, dr_idx)
-        
-        marginals_df_PCA = apply_df_filters(marginals_df, loader_args=loader_args, decoder_args=decoder_args, dimreduc_method="PCA")
-        marginals_df_LQGCA = apply_df_filters(marginals_df, loader_args=loader_args, decoder_args=decoder_args, dimreduc_args=dimreduc_args)        
-        marginals_df = pd.concat([marginals_df_PCA, marginals_df_LQGCA])       
     
     elif region in ['VISp']:
         
@@ -163,41 +122,6 @@ def get_scalar(df_, stat, neu_idx):
 
     return c
 
-def Iscore_debug_plot1(yp_pred, yf_pred, yp_, yf_, r1p_, r1f_, coefp, coeff, i, figpath, region):
-        
-        fig, ax = plt.subplots(1, 2, figsize=(8, 4))
-        ax[0].scatter(yp_pred.squeeze(), np.array(yp_).squeeze(), alpha=0.5)
-        ax[1].scatter(yf_pred.squeeze(), np.array(yf_).squeeze(), alpha=0.5)
-        ax[0].set_title('Spearman: %f, Pearson: %f' % (r1p_, scipy.stats.pearsonr(yp_pred.squeeze(), np.array(yp_).squeeze())[0]), fontsize=10)
-        ax[1].set_title('Spearman: %f, Pearson: %f' % (r1f_, scipy.stats.pearsonr(yf_pred.squeeze(), np.array(yf_).squeeze())[0]), fontsize=10)
-
-        ax[0].set_xlabel('Predicted PCA Loadings', fontsize=10)
-        ax[0].set_ylabel('Actual PCA Loadings', fontsize=10)
-
-        ax[1].set_xlabel('Predicted FCCA Loadings', fontsize=10)
-        ax[1].set_ylabel('Actual FCCA Loadings', fontsize=10)
-
-        ax[0].annotate(r'$\beta$ '  + '(var, dec, enc): (%f, %f, %f)' % tuple(coefp), (0.05, 0.75), xycoords='axes fraction', fontsize=7)
-        ax[1].annotate(r'$\beta$ '  + '(var, dec, enc): (%f, %f, %f)' % tuple(coeff), (0.05, 0.75), xycoords='axes fraction', fontsize=7)
-
-        fig.tight_layout()
-        fig_save_path = '%s/%i_noact_%s.pdf' % (figpath, i, region)
-        fig.savefig(fig_save_path, bbox_inches='tight', pad_inches=0)
-    
-def Iscore_debug_plot2(coefp, coeff, figpath, region):
-
-        # Make a boxplot of the coefficients
-        fig, ax = plt.subplots(1, 2, figsize=(5, 5))
-
-        ax[0].boxplot(np.array(coefp), showfliers=False)
-        ax[1].boxplot(np.array(coeff), showfliers=False)
-        ax[0].set_title('PCA Pred. Coef', fontsize=8)
-        ax[1].set_title('FCCA Pred. Coef', fontsize=8)
-        ax[0].set_xticklabels(['var', 'dec', 'enc'])
-        ax[1].set_xticklabels(['var', 'dec', 'enc'])
-
-        fig_save_path = '%s/coef_boxplot_noact_%s.pdf' % (figpath, region)
-        fig.savefig(fig_save_path, bbox_inches='tight', pad_inches=0)
 
 def Iscore_prediction_boxplot(r1f_, r1p_, figpath, region):
 
@@ -260,9 +184,6 @@ def Iscore_prediction_histogram(su_r, DIM, figpath, region):
                     yerr=std_err, capsize=5)
 
     # Place numerical values above the bars
-    # ax.text(0.5, 1.0, '****', ha='center')
-    # ax.text(3.5, 0.6, '****', ha='center')
-    # ax.text(6.5, 0.76, '****', ha='center')
     ax.set_ylim([-0.5, 1.1])
     ax.set_xticks([0.5, 3.5, 6.5])
     ax.set_xticklabels(['S.U. Var.', 'Dec. Weights', 'S.U. Enc. ' + r'$r^2$'], rotation=30, fontsize=12, ha='right')
@@ -282,21 +203,16 @@ def Iscore_prediction_histogram(su_r, DIM, figpath, region):
     fig.savefig(fig_save_path, bbox_inches='tight', pad_inches=0)
 
 
-def get_importance_score_predictions(decode_df_all, session_key, data_path, region, DIM, debug_plots=False):
+def get_importance_score_predictions(decode_df_all, session_key, data_path, region, DIM):
     # Load dimreduc_df and calculate loadings
 
-    # AK - this should not be needed. Decode_df_all should already have selected the correct loader_args
-    # unique_loader_args = list({frozenset(d.items()) for d in decode_df_all['loader_args']})
-    # loader_args=dict(unique_loader_args[loader_kwargs[region]['load_idx']])
-        
-    # decode_df = apply_df_filters(decode_df_all, **{'loader_args':loader_args})
     decode_df = decode_df_all
 
     
     loadings_df = get_loadings_df(decode_df, session_key, DIM)
     su_calcs_df = get_su_calcs(region)
     sessions = np.unique(loadings_df[session_key].values)
-    if region in ['AM', 'ML', 'VISp']:
+    if region in ['VISp']:
         stats = ['su_var', 'su_act', 'decoding_weights', 'su_encoding_r2']
     else:
         stats = ['su_var', 'su_act', 'decoding_weights', 'su_r2_enc']
@@ -382,10 +298,6 @@ def get_importance_score_predictions(decode_df_all, session_key, data_path, regi
         r1p_.append(scipy.stats.spearmanr(yp_pred.squeeze(), np.array(yp_[i]).squeeze())[0])
         r1f_.append(scipy.stats.spearmanr(yf_pred.squeeze(), np.array(yf_[i]).squeeze())[0])
 
-        if debug_plots: 
-            Iscore_debug_plot1(yp_pred, yf_pred, yp_[i], yf_[i], r1p_[i], r1f_[i], coefp[i], coeff[i], i, figpath, region)
-
-
     ############################ Run Stats
     stats, p = scipy.stats.wilcoxon(r1p_, r1f_, alternative='greater')
     print(f'S.U. prediction medians:({np.median(r1p_)}, {np.median(r1f_)})')
@@ -415,12 +327,9 @@ def get_importance_score_predictions(decode_df_all, session_key, data_path, regi
     return coefp, coeff, r1f_, r1p_, su_r
 
 
-def make_Fig5_Iscore_plots(decode_df_all, session_key, data_path, region, DIM, figpath='.', debug_plots=False):
+def make_Fig5_Iscore_plots(decode_df_all, session_key, data_path, region, DIM, figpath='.'):
 
-    coefp, coeff, r1f_, r1p_, su_r = get_importance_score_predictions(decode_df_all, session_key, data_path, region, DIM, debug_plots)
-
-    if debug_plots:
-        Iscore_debug_plot2(coefp, coeff, figpath, region)
+    coefp, coeff, r1f_, r1p_, su_r = get_importance_score_predictions(decode_df_all, session_key, data_path, region, DIM)
 
     # Make Histogram
     Iscore_prediction_boxplot(r1f_, r1p_, figpath, region)
@@ -458,17 +367,11 @@ def get_marginal_ssa(decoding_df, marginal_df, session_key, region, DIM):
 
             df_filter = {session_key:session, 'dim':DIM, 'dimreduc_method':'PCA', 'fold_idx':fold}
             dfpca_marginal = apply_df_filters(marginal_df, **df_filter)
-            try:
-                assert(dfpca_marginal.shape[0] == 1)
-            except:
-                pdb.set_trace()
+            assert(dfpca_marginal.shape[0] == 1)
 
             df_filter = {session_key:session, 'dim':DIM, 'dimreduc_method':['LQGCA', 'FCCA'], 'fold_idx':fold}
             dffcca_marginal = apply_df_filters(marginal_df, **df_filter)
-            try:
-                assert(dffcca_marginal.shape[0] == 1)
-            except:
-                pdb.set_trace()
+            assert(dffcca_marginal.shape[0] == 1)
 
             # 0: FBC/FFC
             # 1: FFC/FCCm
@@ -537,7 +440,7 @@ def get_marginal_decoding_differences(decoding_df, marginal_df, session_key, reg
 
     return fcca_delta_marg, pca_delta_marg
 
-def make_Fig5_marginals_plots(decoding_df, session_key, data_path, region, DIM, figpath='.', debug_plots=True):
+def make_Fig5_marginals_plots(decoding_df, session_key, data_path, region, DIM, figpath='.'):
 
     marginal_df = get_marginal_dfs(region)
 
@@ -613,9 +516,6 @@ def make_Fig5_marginals_plots(decoding_df, session_key, data_path, region, DIM, 
     ax[1].set_xlim(dim_lims[region])
     ax[1].set_xticks(dim_ticks[region])
 
-    #ax[1].set_ylim([0, 0.2])
-    #ax[1].set_yticks([0, 0.2])
-    # ax[1].legend(['FBC/FBCm', 'FFC/FFCm'], loc='lower right', fontsize=14)
 
     # Some Statistical Tests
     stat, p1 = scipy.stats.wilcoxon(np.mean(ss_angles[:, :, 2, :], axis=(1, -1)).ravel(), np.mean(ss_angles[:, :, 1, :], axis=(1, -1)).ravel(), alternative='greater')
@@ -638,22 +538,16 @@ def make_Fig5_marginals_plots(decoding_df, session_key, data_path, region, DIM, 
 
 dim_dict = {
     'M1_psid': 6,
-    'M1_trialized':6,
+    'M1': 6,
     'S1_psid': 6,
+    'S1': 6,
     'HPC_peanut': 11,
-    'M1_maze': 6,
-    'AM': 21,
-    'ML': 21,
-    'mPFC':15,
-    'HPC':15,
     'VISp':10,
-    'organoids':10
 }
 
 if __name__ == '__main__':
-    # regions = ['M1', 'S1', 'M1_maze', 'HPC_peanut', 'AM', 'ML']
     regions = ['M1_psid', 'S1_psid', 'HPC_peanut', 'VISp']
-    # regions = ['VISp']
+
     iscore_predf_all = []
     iscore_predp_all = []
 
@@ -663,26 +557,25 @@ if __name__ == '__main__':
     deltar2f_all = []
     deltar2p_all = []
 
-    if False:
-        for region in tqdm(regions):
-            DIM = dim_dict[region]
-            figpath = PATH_DICT['figs']
+    for region in tqdm(regions):
+        DIM = dim_dict[region]
+        figpath = PATH_DICT['figs']
 
-            df, session_key = load_decoding_df(region, **loader_kwargs[region])
-            data_path = get_data_path(region)
+        df, session_key = load_decoding_df(region, **loader_kwargs[region])
+        data_path = get_data_path(region)
 
-            # Importance score predictions
-            iscore_predf, iscore_predp = make_Fig5_Iscore_plots(df, session_key, data_path, region, DIM, figpath=figpath, debug_plots=False)
-            iscore_predf_all.append(iscore_predf)
-            iscore_predp_all.append(iscore_predp)
+        # Importance score predictions
+        iscore_predf, iscore_predp = make_Fig5_Iscore_plots(df, session_key, data_path, region, DIM, figpath=figpath)
+        iscore_predf_all.append(iscore_predf)
+        iscore_predp_all.append(iscore_predp)
 
-            pkr2f, pkr2p, ssaf, ssap = make_Fig5_marginals_plots(df, session_key, data_path, region, DIM, figpath=figpath, debug_plots=False)
+        pkr2f, pkr2p, ssaf, ssap = make_Fig5_marginals_plots(df, session_key, data_path, region, DIM, figpath=figpath)
 
-            deltar2f_all.append(pkr2f)
-            deltar2p_all.append(pkr2p)
+        deltar2f_all.append(pkr2f)
+        deltar2p_all.append(pkr2p)
 
-            ssaf_all.append(ssaf)
-            ssap_all.append(ssap)
+        ssaf_all.append(ssaf)
+        ssap_all.append(ssap)
 
 
         # Pickle away

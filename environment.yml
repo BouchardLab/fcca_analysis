@@ -1,0 +1,21 @@
+name: ncontrol
+channels:
+- conda-forge
+dependencies:
+- geos
+- h5py
+- ipympl
+- jupyter
+- matplotlib
+- mpi4py
+- notebook
+- numpy=2.1
+- pandas
+- pynwb
+- python=3.12
+- pytorch
+- scikit-learn
+- slycot
+- tqdm
+- umap-learn
+

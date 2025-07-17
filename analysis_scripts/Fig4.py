@@ -3,8 +3,6 @@ import sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy 
-import time
-import glob
 import pickle
 import pandas as pd
 from tqdm import tqdm
@@ -20,32 +18,20 @@ import matplotlib.colors as colors
 from region_select import *
 from config import PATH_DICT
 sys.path.append(PATH_DICT['repo'])
-from utils import calc_loadings, calc_cascaded_loadings
+from utils import calc_loadings
 
 
 scatter_lims = {
     'M1': [-6.2, 0.1],
     'S1': [-6.2, 0.1],
-    'M1_trialized': [-6.5, 0.1],
-    'M1_maze': [-2.5, 0.1],
     'HPC_peanut': [-6, 0.1],
-    'AM': [-6, 0.1],
-    'ML': [-6, 0.1],
-    'mPFC': [-6, 0.1],
-    'HPC': [-5.5, 0.1],
     'VISp': [-6, 0.1]
 }
 
 scatter_ticks = {
     'M1': [0, -3 ,-6],
     'S1': [0, -3, -6],
-    'M1_trialized': [0, -3, -6],
-    'M1_maze': [0, -1, -2],
     'HPC_peanut': [0, -3, -6],
-    'AM': [0, -3, -6],
-    'ML': [0, -3, -6],
-    'mPFC': [0, -3, -6],
-    'HPC': [0, -2.5, -5],
     'VISp': [0, -3, -6]
 }
 
@@ -53,28 +39,15 @@ scatter_ticks = {
 hist_ylims = {
     'M1': [0, 300],
     'S1': [0, 120],
-    'M1_trialized': [0, 300],
-    'M1_maze': [0, 40],
     'HPC_peanut': [0, 30],
-    'AM': [0, 65],
-    'ML': [0, 85],
-    'mPFC': [0, 10],
-    'HPC': [0, 10],
     'VISp': [0, 125]
 }
 
 hist_yticks = {
     'M1': [0, 150, 300],
     'S1': [0, 60, 120],
-    'M1_trialized': [0, 150, 300],
-    'M1_maze': [0, 20, 40],
     'HPC_peanut': [0, 15, 30],
-    'AM': [0, 30, 60],
-    'ML': [0, 40, 80],
-    'mPFC': [0, 5, 10],
-    'HPC': [0, 5, 10],
     'VISp': [0, 60, 120]
-
 }
 
 def get_loadings_df(dimreduc_df, session_key, dim=6):
@@ -90,10 +63,7 @@ def get_loadings_df(dimreduc_df, session_key, dim=6):
             for fold_idx in range(5):            
                 df_filter = {session_key:session, 'fold_idx':fold_idx, 'dim':dim, 'dimreduc_method':dimreduc_method}
                 df_ = apply_df_filters(dimreduc_df, **df_filter)
-                try:
-                    assert(df_.shape[0] == 1)
-                except:
-                    pdb.set_trace()
+                assert(df_.shape[0] == 1)
                 V = df_.iloc[0]['coef']
                 if dimreduc_method == 'PCA':
                     V = V[:, 0:dim]        
@@ -145,54 +115,6 @@ def get_loadings_and_top_neurons(dimreduc_df, session_key, dim=6, n=10):
 
     return loadings_pca, loadings_fca
 
-# Calculate the top FFC/FBC neurons and return their indices for each 
-# data file for use in loading
-def subset_selection(dimreduc_df, quantile, session_key, region='M1'):
-    loadings_df = get_loadings_df(dimreduc_df)
-    keys = ['FCCA_loadings', 'PCA_loadings']
-
-    # Top FCA neurons
-    subset_FCA = {}
-    # Top PCA neurons
-    subset_PCA = {}
-    sessions = np.unique(dimreduc_df[session_key].values)
-    for i, session in enumerate(sessions):
-        # Per recording session
-        yf_ = []
-        yp_ = []
-        for j in range(2):
-            df = apply_df_filters(loadings_df,**{session_key:session})
-            x1 = df[keys[j]].values
-            if j == 0:
-                yf_.append(x1)
-            else:
-                yp_.append(x1)
-
-        rfbc = yf_[-1]/(yf_[-1] + yp_[-1])
-        rffc = yp_[-1]/(yf_[-1] + yp_[-1])
-
-        fca_cutoff = np.quantile(rfbc, quantile)
-        pca_cutoff = np.quantile(rffc, quantile)
-
-        fca_indices = np.argwhere(rfbc < fca_cutoff).squeeze()
-        pca_indices = np.argwhere(rffc < pca_cutoff).squeeze()
-
-        subset_FCA[session] = fca_indices
-        subset_PCA[session] = pca_indices
-
-    # Save away
-    path = '/home/akumar/nse/neural_control/subset_indices'
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    f1 = open(path + '/fca_subset_q%d_%s.pkl' % (int(100 * quantile), region), 'wb')
-    f2 = open(path + '/pca_subset_q%d_%s.pkl' % (int(100 * quantile), region), 'wb')
-
-    f1.write(pickle.dumps(subset_FCA))
-    f2.write(pickle.dumps(subset_PCA))
-
-    f1.close()
-    f2.close()
 
 def make_scatter(dimreduc_df, session_key, region, dim):
 
@@ -254,43 +176,24 @@ def make_scatter(dimreduc_df, session_key, region, dim):
     fig.savefig(figpath, bbox_inches='tight', pad_inches=0)
     return r
 
-def run_lda_analysis(dimreduc_df, data_path, session_key, region, dim, boxcox=False,
-                     overwrite=False):
-    if boxcox:
-        savepath = '/psth_clustering_tmp%s_boxcox.pkl' % region
-    else:
-        savepath = '/psth_clustering_tmp%s.pkl' % region
+def run_lda_analysis(dimreduc_df, data_path, session_key, region, dim, overwrite=False):
+    savepath = '/psth_clustering_tmp%s.pkl' % region
 
     if not os.path.exists(PATH_DICT['tmp'] + savepath) or overwrite:
         xall = []
         print('Collecting PSTH')
 
-        if region in ['AM', 'ML']:
-            dimreduc_reg_df = apply_df_filters(dimreduc_df, **{'loader_args':{'region': region}})
-            loadings_df = get_loadings_df(dimreduc_reg_df, session_key, dim=dim)
-        else:
-            loadings_df = get_loadings_df(dimreduc_df, session_key, dim=dim)
+        loadings_df = get_loadings_df(dimreduc_df, session_key, dim=dim)
 
         sessions = np.unique(loadings_df[session_key].values)
         for h, session in enumerate(sessions):
-            if region in ['AM', 'ML']:  
-                dimreduc_df_sess = apply_df_filters(dimreduc_df, **{session_key:session, 'loader_args':{'region': region}})
-                x = get_rates_smoothed(data_path, region, session,   full_arg_tuple=dimreduc_df_sess['full_arg_tuple'], std=False)
-            else:
-                x = get_rates_smoothed(data_path, region, session, loader_args=dimreduc_df.iloc[0]['loader_args'], std=False)
-            xall.append(x)
 
-        # MIH HACK TO CHANGE LATER !!!
-        if region in ['AM', 'ML']:
-            xall = [x[:, :19] for x in xall]
+            x = get_rates_smoothed(data_path, region, session, loader_args=dimreduc_df.iloc[0]['loader_args'], std=False)
+            xall.append(x)
 
         xall_stacked = np.vstack(xall)
         param = (4, 0.2, 50)
-        # Share the UMAP projection across recording sessions - measure classificationa ccuraacy per recording session
-        if region == 'AM':
-            fit = umap.UMAP(min_dist=param[1], n_neighbors=param[2], n_components=param[0], random_state=None, transform_seed=None)
-        else:
-            fit = umap.UMAP(min_dist=param[1], n_neighbors=param[2], n_components=param[0], random_state=42, transform_seed=42)
+        fit = umap.UMAP(min_dist=param[1], n_neighbors=param[2], n_components=param[0], random_state=42, transform_seed=42)
         print('Fiting UMAP')
         u = fit.fit_transform(xall_stacked)        
         fbc_fraction = np.linspace(0.5, 0.95, 25)
@@ -358,12 +261,9 @@ def run_lda_analysis(dimreduc_df, data_path, session_key, region, dim, boxcox=Fa
             # f.write(pickle.dumps(class_sizes))
         
 # quantile - save away indices of subset of neurons with high/low LDA component value
-def plot_lda_analysis(dimreduc_df, session_key, region='M1', quantile=0.75, boxcox=False):
+def plot_lda_analysis(dimreduc_df, session_key, region='M1', quantile=0.75):
 
-    if boxcox:
-        savepath = '/psth_clustering_tmp%s_boxcox.pkl' % region
-    else:
-        savepath = '/psth_clustering_tmp%s.pkl' % region
+    savepath = '/psth_clustering_tmp%s.pkl' % region
     if not os.path.exists(PATH_DICT['tmp'] + savepath):
         raise ValueError('Call run_lda_analysis first')
 
@@ -404,10 +304,7 @@ def plot_lda_analysis(dimreduc_df, session_key, region='M1', quantile=0.75, boxc
     # ax[1].set_xlabel('FBC Quantile', fontsize=14)
     # ax[1].set_ylabel('Average Class Size', fontsize=14)
     # fig.tight_layout()
-    if boxcox:
-        figpath = PATH_DICT['figs'] + '/umap_clusteringLDA%s_boxcox.pdf' % region
-    else:
-        figpath = PATH_DICT['figs'] + '/umap_clusteringLDA%s.pdf' % region
+    figpath = PATH_DICT['figs'] + '/umap_clusteringLDA%s.pdf' % region
 
     fig.savefig(figpath, bbox_inches='tight', pad_inches=0)
 
@@ -454,34 +351,6 @@ def plot_lda_analysis(dimreduc_df, session_key, region='M1', quantile=0.75, boxc
     xtrans = lda.fit_transform(u, ntype)
 
     xtrans_bysession = np.split(xtrans.squeeze(), np.array(indices)[1:-1])
-    # Top FCA neurons
-    subset_FCA = {}
-    # Top PCA neurons
-    subset_PCA = {}
-
-    for i, session in enumerate(sessions):
-        # Large component values are FBC neurons, small component values are FFC neurons
-        fbc_cutoff = np.quantile(xtrans_bysession[i], quantile)
-        ffc_cutoff = np.quantile(xtrans_bysession[i], 1 - quantile)
-
-        fbc_indices = np.argwhere(xtrans_bysession[i] < fbc_cutoff).squeeze()
-        ffc_indices = np.argwhere(xtrans_bysession[i] > ffc_cutoff).squeeze()
-
-        subset_FCA[session] = fbc_indices
-        subset_PCA[session] = ffc_indices
-
-    # path = '/home/akumar/nse/neural_control/subset_indices'
-    # if not os.path.exists(path):
-    #     os.makedirs(path)
-
-    # f1 = open(path + '/fca_ldasubset_q%d_%s.pkl' % (int(100 * quantile), region), 'wb')
-    # f2 = open(path + '/pca_ldasubset_q%d_%s.pkl' % (int(100 * quantile), region), 'wb')
-
-    # f1.write(pickle.dumps(subset_FCA))
-    # f2.write(pickle.dumps(subset_PCA))
-
-    # f1.close()
-    # f2.close()
     
     # Color by type
     carray = cm.RdGy(range(256))
@@ -503,8 +372,8 @@ def plot_lda_analysis(dimreduc_df, session_key, region='M1', quantile=0.75, boxc
         #patches[i].set_facecolor(carray[0])
     ax.set_xlabel('LDA Dimension 1')
     ax.set_ylabel('Count')
-    #ax.set_ylim(hist_ylims[region])
-    #ax.set_yticks(hist_yticks[region])
+    ax.set_ylim(hist_ylims[region])
+    ax.set_yticks(hist_yticks[region])
     
     #ax.set_aspect('equal')
     # Vertical colorbar
@@ -529,192 +398,28 @@ def plot_lda_analysis(dimreduc_df, session_key, region='M1', quantile=0.75, boxc
     axin.plot(fbc_fraction, np.mean(scores, axis=(1, 2)), color='#625487')
     axin.fill_between(fbc_fraction, np.mean(scores, axis=(1, 2)) - np.std(scores, axis=(1, 2)), np.mean(scores, axis=(1, 2)) + np.std(scores, axis=(1, 2)), alpha=0.5, color='#625487')
 
-    if boxcox:
-        figpath = PATH_DICT['figs'] + '/%s_lda_viz_boccox.pdf' % region
-    else:
-        figpath = PATH_DICT['figs'] + '/%s_lda_viz.pdf' % region
+    figpath = PATH_DICT['figs'] + '/%s_lda_viz.pdf' % region
 
     fig.savefig(figpath, bbox_inches='tight', pad_inches=0)
     
 
-def make_PSTHs(df, session_key, data_path, region):
-
-    # Get raw rates
-    session = np.unique(df[session_key].values)[0]
-        
-        
-    if region in ['organoids']:
-        dimreduc_df_sess = apply_df_filters(df, **{session_key:session})
-    else:
-        dimreduc_df_sess = apply_df_filters(df, **{session_key:session, 'loader_args':{'region': region}})
-        
-        
-    binWidth = dimreduc_df_sess['loader_args'][0]['bin_width']
     
-    if region in ['ML', 'AM']:
-        spike_rates, spike_times = get_tsao_raw_rates(data_path, region, session, full_arg_tuple=dimreduc_df_sess['full_arg_tuple'])
-    else:
-
-        #unique_loader_args = list({frozenset(d.items()) for d in df['loader_args']})
-        #loader_args=dict(unique_loader_args[loader_kwargs[region]['load_idx']])
-        loader_args = df['loader_args'][0]
-        spike_rates = get_rates_raw(data_path, region, session, loader_args=loader_args)
-
-    
-    #rates = get_rates_raw(data_path, region, session, full_arg_tuple=dimreduc_df_sess['full_arg_tuple'])
-    #rates = get_rates_smoothed(data_path, region, session, full_arg_tuple=dimreduc_df_sess['full_arg_tuple'])
-    loadings_df_all = get_loadings_df(df, session_key, dim=dim_dict[region])    
-    loadings_df = apply_df_filters(loadings_df_all, **{'data_file':session})
-                
-    
-    nUnits = 20
-    #fcca_sort = np.argsort(loadings_df['FCCA_loadings'])[::-1]
-    fcca_sort = np.argsort(loadings_df['FCCA_loadings'] / (loadings_df['FCCA_loadings']+loadings_df['PCA_loadings']))[::-1]
-    fcca_inds = loadings_df['nidx'][fcca_sort[:nUnits]]
-    
-    
-    #pca_sort = np.argsort(loadings_df['PCA_loadings'])[::-1]
-    pca_sort = np.argsort(loadings_df['PCA_loadings'] / (loadings_df['FCCA_loadings']+loadings_df['PCA_loadings']))[::-1]
-    pca_inds = loadings_df['nidx'][pca_sort[:nUnits]]
-    
-    #time_cut_ind = int(550 // binWidth)
-    filter_size = 1
-    fcca_avg_rates = np.mean(gaussian_filter1d(spike_rates[:, :, fcca_inds], sigma=filter_size, axis=1), 0).squeeze()
-    pca_avg_rates = np.mean(gaussian_filter1d(spike_rates[:, :, pca_inds], sigma=filter_size, axis=1), 0).squeeze()
-    
-    if region == 'ML':
-        column_max_values = np.max(fcca_avg_rates, axis=0)
-        two_largest_indices = np.argsort(column_max_values)[-2:]  # Get the last two indices of sorted values
-        fcca_avg_rates = fcca_avg_rates[:, np.setdiff1d(np.arange(fcca_avg_rates.shape[1]), two_largest_indices)]
-
-
-    time = np.arange(np.shape(spike_rates)[1])
-    time_labels = time*binWidth
-
-    
-    fig, ax = plt.subplots(2, 1, figsize=(6, 6))
-    ax[0].plot(time, fcca_avg_rates, color="red")
-    ax[0].set_title(f"Top {nUnits} FCCA Unit PSTHs")
-    ax[0].set_ylabel("Firing Rate")
-    ax[0].set_xlabel("Time (ms)")
-    ax[0].set_xticks(time[::2])
-    ax[0].set_xticklabels(time_labels[::2])
-    
-    ax[1].plot(time, pca_avg_rates, color="black")
-    ax[1].set_title(f"Top {nUnits} PCA Unit PSTHs")
-    ax[1].set_ylabel("Firing Rate")
-    ax[1].set_xlabel("Time (ms)")
-    ax[1].set_xticks(time[::2])
-    ax[1].set_xticklabels(time_labels[::2])
-    
-    plt.subplots_adjust(hspace=0.5)
-    figpath = PATH_DICT['figs'] + f"/PSTHs_{region}.pdf"
-    fig.savefig(figpath, bbox_inches='tight', pad_inches=0)
-    
-    """
-    for uID in range(nUnits):
-        
-        unitID = fcca_inds[fcca_inds.keys()[uID]]
-        
-        num_trials = np.shape(spike_times)[0]
-        fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-        
-        for trial in range(num_trials):
-            spikes_for_trial = spike_times[trial][unitID]  # Spike times for the current trial and unit
-            
-            # Plot each spike as an 'x'
-            ax.scatter(spikes_for_trial, np.full_like(spikes_for_trial, trial + 1), color="black", marker='x')
-
-        ax.set_xlabel("Time (ms)")
-        ax.set_ylabel("Trials")
-        ax.set_title(f"Raster Plot for FCCA Unit {uID}")
-        ax.invert_yaxis()  # Invert y-axis to have trials from top to bottom
-
-        figpath = PATH_DICT['figs'] + f"/Rasters/fcca_rasters_{region}_unit{uID}.pdf"
-        fig.savefig(figpath, bbox_inches='tight', pad_inches=0)      
-        
-    for uID in range(nUnits):
-        
-        unitID = pca_inds[pca_inds.keys()[uID]]
-        
-        num_trials = np.shape(spike_times)[0]
-        fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-        
-        for trial in range(num_trials):
-            spikes_for_trial = spike_times[trial][unitID]  # Spike times for the current trial and unit
-            
-            # Plot each spike as an 'x'
-            ax.scatter(spikes_for_trial, np.full_like(spikes_for_trial, trial + 1), color="black", marker='x')
-
-        ax.set_xlabel("Time (ms)")
-        ax.set_ylabel("Trials")
-        ax.set_title(f"Raster Plot for PCA Unit {uID}")
-        ax.invert_yaxis()  # Invert y-axis to have trials from top to bottom
-
-        figpath = PATH_DICT['figs'] + f"/Rasters/pca_rasters_{region}_unit{uID}.pdf"
-        fig.savefig(figpath, bbox_inches='tight', pad_inches=0)     
-            """
-        
-
 dim_dict = {
     'M1': 6,
-    'M1_trialized':6,
     'S1': 6,
     'HPC_peanut': 11,
-    'M1_maze': 6,
-    'AM': 21,
-    'ML': 21,
-    'mPFC':15,
-    'HPC': 15,
     'VISp':10,
-    'organoids': 10
 }
 
 if __name__ == '__main__':
-    #regions = ['M1', 'S1', 'HPC_peanut', 'M1_maze', 'M1_trialized', 'AM', 'ML', 'HPC', 'mPFC']
-    # Note: HPC_peanut's decode file in clustersfs/FCCA/postprocessed is not concatenated correctly (doesn't have dimreduc info in it)
-
-<<<<<<< HEAD
-    regions = ['organoids'] 
-    
-
-    overwrite = True # Re-run UMAP/LDA?
-    boxcox = [True] # Should we apply a boxcox transformation upon loadings
-=======
-    # regions = ['VISp']#['AM', 'ML'] 
     regions = ['M1', 'S1', 'HPC_peanut', 'VISp']
-    overwrite = False # Re-run UMAP/LDA?
-    boxcox = [False] # Should we apply a boxcox transformation upon loadings
->>>>>>> bf5ffe1de631db9a5b53b56be99df0a4b271468b
-    
+    overwrite = False # Re-run UMAP/LDA?    
     for region in tqdm(regions):
         df, session_key = load_decoding_df(region, **loader_kwargs[region])
         data_path = get_data_path(region)
 
-        # make_PSTHs(df, session_key, data_path, region)
-        #continue
-        
-<<<<<<< HEAD
-        #_ = make_scatter(df, session_key, region, dim_dict[region])
-        for bc in boxcox:
-
-            run_lda_analysis(df, data_path, session_key, region,  dim=dim_dict[region], boxcox=bc, overwrite=overwrite)
-            plot_lda_analysis(df, session_key, region, boxcox=bc)
-            #for q in np.array([0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]):
-            #    subset_selection(df, q, session_key, region)
-=======
-        # _ = make_scatter(df, session_key, region, dim_dict[region])
-        # continue
-
-        for bc in boxcox:
-            # run_lda_analysis(df, data_path, session_key, region, 
-            #                  dim=dim_dict[region], boxcox=bc, overwrite=overwrite)
-
-            plot_lda_analysis(df, session_key, region, boxcox=bc)
-
-        #     # # for q in np.array([0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]):
-        #     #     subset_selection(df, q, session_key, region)
->>>>>>> bf5ffe1de631db9a5b53b56be99df0a4b271468b
+        _ = make_scatter(df, session_key, region, dim_dict[region])
+        run_lda_analysis(df, data_path, session_key, region,  dim=dim_dict[region], overwrite=overwrite)
+        plot_lda_analysis(df, session_key, region)
             
-                
         print(f"Done with: {region}")

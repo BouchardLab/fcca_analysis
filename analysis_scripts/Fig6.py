@@ -19,10 +19,7 @@ rot_xticks = {
     'M1': [0., 0.15],
     'S1': [0., 0.15],
     'HPC_peanut': [-0.2, -0.1, 0, 0.1, 0.2],
-    'ML': [0, 0.25, 0.5],
-    'AM': [0, 0.1, 0.3],
     'VISp': [0., 0.15],
-    'organoids': [0, 0.1, 0.2, 0.3, 0.4]
     
 }
 
@@ -30,30 +27,21 @@ rot_xlims = {
     'M1': [0., 0.15],
     'S1': [0., 0.15],
     'HPC_peanut': [-0.1, 0.2],
-    'ML': [0, 0.5],
-    'AM': [0, 0.35],
     'VISp': [0., 0.15],
-    'organoids': [0, 0.4]
 }
 
 dyn_xticks = {
     'M1': [0., 1, 2],
     'S1': [0., 1, 2],
     'HPC_peanut': [0, 1, 2, 3],
-    'ML': [0, 1, 2, 3],
-    'AM': [0, 1, 2, 3],
     'VISp': [0, 1, 2, 3],
-    'organoids': [0., 1, 2]
 }
 
 dyn_xlims = {
     'M1': [-0.1, 1.25],
     'S1': [-0.75, 2],
     'HPC_peanut': [0, 2],
-    'ML': [0, 3.5],
-    'AM': [0, 3],
     'VISp': [0., 3],
-    'organoids': [0., 2]
 }
 
 
@@ -240,8 +228,7 @@ def make_traj_amplification_plots(df_, y, DIM):
 
     trajectory -= trajectory[:, 0:1, :]
     trajectory = trajectory @ U
-    #dyn_range = np.max(np.abs(trajectory), axis=1)
-    dyn_range = np.max(np.abs(yproj @ U), axis=1)
+    dyn_range = np.max(np.abs(trajectory), axis=1)
     ordering = np.argsort(dyn_range, axis=0)[::-1]
 
     t0 = trajectory[ordering[:, 0], :, 0]
@@ -369,10 +356,6 @@ def make_box_plots(rot_strength_fcca, rot_strength_pca,
     method1 = 'FBC'
     method2 = 'FFC'
 
-    # ax1.set_xticklabels([], fontsize=12)
-    # ax1.set_yticklabels([], fontsize=12)
-    # ax1.set_yticks(dyn_xticks[region])
-    # ax1.set_ylim(dyn_xlims[region])
     ax1.tick_params(axis='both', labelsize=12)
     #ax.set_ylabel(r'$\sum_i Im(\lambda_i)$', fontsize=22)
     ax1.set_ylabel('', fontsize=9)
@@ -428,6 +411,7 @@ def collate_jpca_results(decoding_df, session_key, region, DIM, T=None):
         for j, dimreduc_method in enumerate(['LQGCA', 'PCA']):
             df_ = apply_df_filters(A_df, **{session_key: sessions[i], 'dimreduc_method':dimreduc_method})
             eigs = df_.iloc[0]['jeig']
+    
             rot_strength[i, j] = np.sum(np.abs(eigs))/2
             dyn_range[i, j] = df_.iloc[0]['dyn_range']
             raw_jpca_eigvals[i, j, :] = np.abs(eigs)    
@@ -504,22 +488,8 @@ def collate_jpca_results(decoding_df, session_key, region, DIM, T=None):
         'mu_dyn_stdnorm_control': mu_dyn_stdnorm_control,
     }
 
-def collate_fig6justification(regions, dim_set, recalculate=False):    
-    dim_dicts = [
-        {
-            'M1': 6,
-            'S1': 6,
-            'HPC_peanut': 11,
-            'VISp': 10
-        },
-        {
-            'M1': 6,
-            'S1': 6,
-            'HPC_peanut': 6,
-            'VISp': 6
-        }
-    ]
-    if not os.path.exists(PATH_DICT['tmp'] + f'/fig6_justification_dimset{dim_set}.pkl'):
+def collate_fig6(regions, recalculate=False):    
+    if not os.path.exists(PATH_DICT['tmp'] + f'/fig6_collated_tmp.pkl'):
         recalculate = True
 
     if recalculate:
@@ -552,7 +522,10 @@ def collate_fig6justification(regions, dim_set, recalculate=False):
             # Order by how we have specified regions
             dim_delta_max = []
             for i in range(len(regions)):
-                index = regions_decodingvdim.index(regions[i])
+                if regions[i] in ['M1', 'S1']:
+                    index = regions_decodingvdim.index(regions[i] + '_psid')
+                else:
+                    index = regions_decodingvdim.index(regions[i])
                 dr2 = r2f_across_regions[index] - r2p_across_regions[index]
                 dim_delta_max.append(np.argmax(dr2, axis=1) + 1)
 
@@ -560,17 +533,18 @@ def collate_fig6justification(regions, dim_set, recalculate=False):
             if '_psid' in region:
                 region = region.split('_psid')[0]
 
-            DIM = dim_dicts[dim_set][region]
+            DIM = dim_dict[region]
             dims.append(DIM)
             results_dict = collate_jpca_results(df, session_key, region, DIM)
             rot_dyn_results_dicts.append(results_dict)
-        with open(PATH_DICT['tmp'] + f'/fig6_justification_dimset{dim_set}.pkl', 'wb') as f:
+
+        with open(PATH_DICT['tmp'] + f'/fig6_collated_tmp.pkl', 'wb') as f:
             pickle.dump({'ss_angles_all':ss_angles_all, 
                             'rot_dyn_results_dicts': rot_dyn_results_dicts,
                             'dims': dims,
                             'dim_delta_max': dim_delta_max}, f)
     else:
-        with open(PATH_DICT['tmp'] + f'/fig6_justification_dimset{dim_set}.pkl', 'rb') as f:
+        with open(PATH_DICT['tmp'] + f'/fig6_collated_tmp.pkl', 'rb') as f:
             data = pickle.load(f)
 
         ss_angles_all = data['ss_angles_all']
@@ -580,120 +554,8 @@ def collate_fig6justification(regions, dim_set, recalculate=False):
 
     return ss_angles_all, rot_dyn_results_dicts, dims, dim_delta_max
 
-def plot_Fig6(decoding_df, session_key, data_path, region, DIM, figpath='.', rand_offset=True):
 
-    jDIM = DIM - 1 if DIM % 2 != 0 else DIM    # jPCA dimension must be even
-
-    results_dict = collate_jpca_results(decoding_df, session_key, region, DIM)
-
-    rot_strength_fcca = results_dict['rot_strength_fcca']
-    rot_strength_pca = results_dict['rot_strength_pca']
-    dyn_range_fcca = results_dict['dyn_range_fcca']
-    dyn_range_pca = results_dict['dyn_range_pca']
-
-    # Offset to random
-    if rand_offset:
-        rot_strength_fcca = rot_strength_fcca - results_dict['mu_rot_control']
-        rot_strength_pca = rot_strength_pca - results_dict['mu_rot_control']
-        dyn_range_fcca = dyn_range_fcca - results_dict['mu_dyn_control']
-        dyn_range_pca = dyn_range_pca - results_dict['mu_dyn_control']
-
-    make_box_plots(rot_strength_fcca, rot_strength_pca, 
-                   dyn_range_fcca, dyn_range_pca, region, figpath, rand_offset)
-
-    # Also plot the raw jpCA eigvals
-    fig, ax = plt.subplots(figsize=(4, 4))
-    eig_f = results_dict['raw_jpca_eigvals_fcca']
-    eig_p = results_dict['raw_jpca_eigvals_pca']
-
-    for j in range(eig_f.shape[1]):
-        ax.scatter(2 * np.ones(eig_f.shape[0]) * j, eig_f[:, j], color='red', alpha=0.5)
-        ax.scatter(2 * np.ones(eig_p.shape[0]) * j + 0.5, eig_p[:, j], color='black', alpha=0.5)
-        # Connect the scatter points by a line
-        ax.plot(np.hstack([2 * np.ones((eig_f.shape[0], 1)) * j, 2 * np.ones((eig_p.shape[0], 1)) * j + 0.5]), 
-                np.hstack([eig_f[:, j][:, np.newaxis], eig_p[:, j][:, np.newaxis]]), color='gray', alpha=0.5)
-
-    ax.set_xticks(np.arange(1, eig_f.shape[1] + 1))
-    ax.set_xlabel('Eigenvalue Index')
-    ax.set_ylabel('jPCA Eigenvalues')
-    # ax.legend()
-    fig.tight_layout()
-    fig.savefig(figpath + f'/raw_jpca_eigvals_{region}.pdf', bbox_inches='tight', pad_inches=0)
-    # # Plot projections for the sessions
-    # figdir = f'{figpath}/{region}_fig6traces'
-    # if not os.path.exists(figdir):
-    #     os.makedirs(figdir)
-
-    # sessions = np.unique(decoding_df[session_key].values)
-    # for i, session in enumerate(sessions):
-    #     if region in ['AM', 'ML']:
-    #         fcca_filter = {session_key:session, 'fold_idx':0, 'dim':DIM, 
-    #                     'dimreduc_method':'LQGCA', 'loader_args':{'region': region}}
-    #         pca_filter = {session_key:session, 'fold_idx':0, 'dim':DIM, 
-    #                     'dimreduc_method':'PCA', 'loader_args':{'region': region}}
-    #     else:
-    #         fcca_filter = {session_key:session, 'fold_idx':0, 'dim':DIM, 'dimreduc_method':'LQGCA'}
-    #         pca_filter = {session_key:session, 'fold_idx':0, 'dim':DIM, 'dimreduc_method':'PCA'}
-
-    #     df_fcca = apply_df_filters(decoding_df, **fcca_filter)
-    #     df_pca = apply_df_filters(decoding_df, **pca_filter)
-
-    #     y = get_rates_largs(T_dict[region], decoding_df, data_path, region, session)
-    #     figpath = f'{figdir}/rot_{session}.pdf'     
-    #     make_rot_plots(region, y, df_fcca, df_pca, jDIM, figpath)
-
-    #     figpath_fcca = f'{figdir}/ampl_{session}_fcca.pdf'
-    #     f1_fcca, f2_fcca, ax_fcca = make_traj_amplification_plots(df_fcca, y, jDIM)
-
-
-    #     figpath_pca = f'{figdir}/ampl_{session}_pca.pdf'
-    #     f1_pca, f2_pca, ax_pca = make_traj_amplification_plots(df_pca, y, jDIM)
-
-    #     # Standardize y axes
-    #     ylims = []
-    #     for ax in [ax_fcca, ax_pca]:
-    #         for a in ax:
-    #             ylims.extend([l.get_ydata().min() for l in a.lines])
-    #             ylims.extend([l.get_ydata().max() for l in a.lines])
-        
-    #     # Add some padding
-    #     ymax = max(np.abs(np.min(ylims)), np.max(ylims))
-    #     ymin = -ymax
-    #     padding = 0.2 * (ymax - ymin)
-        
-    #     # Set same y limits for all axes
-    #     for ax in [ax_fcca, ax_pca]:
-
-    #         if region == 'HPC_peanut':
-    #             for a in ax:
-    #                 a.set_ylim([-2, 3])
-    #         elif region == 'M1':
-    #             for a in ax:
-    #                 a.set_ylim([-2, 8])
-    #         else:
-    #             for a in ax:
-    #                 a.set_ylim([ymin-padding, ymax+padding])
-    #                 # Set the ticks to the nearest integer below the ymin and ymax 
-    #                 a.set_yticks([np.ceil(ymin - padding), np.floor(ymax + padding)])
-
-
-    #     figpath_fcca_a = figpath_fcca.replace('.pdf', '_a.pdf') 
-    #     figpath_fcca_b = figpath_fcca.replace('.pdf', '_b.pdf')
-    #     figpath_pca_a = figpath_pca.replace('.pdf', '_a.pdf')
-    #     figpath_pca_b = figpath_pca.replace('.pdf', '_b.pdf')
-
-
-    #     f1_fcca.savefig(figpath_fcca_a, bbox_inches='tight', pad_inches=0)
-    #     f2_fcca.savefig(figpath_fcca_b, bbox_inches='tight', pad_inches=0)
-    #     f1_pca.savefig(figpath_pca_a, bbox_inches='tight', pad_inches=0)
-    #     f2_pca.savefig(figpath_pca_b, bbox_inches='tight', pad_inches=0)
-
-    #     # Close all figures
-    #     plt.close('all')
-
-    return rot_strength_fcca, rot_strength_pca, dyn_range_fcca, dyn_range_pca
-
-def plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, dim_delta_max, dual_axes=False):
+def plot_Fig6(regions, ss_angles_all, rot_dyn_results_dicts, dual_axes=False):
 
     # FBC/FBCm and FFC/FFCm - average over folds and angles
     fbc_fbcm = [s[:, :, 2, :].mean(axis=(1, 2)) for s in ss_angles_all]
@@ -725,13 +587,6 @@ def plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, 
         delta_rot_se = delta_rot_std / np.sqrt(len(delta_rot[i]))
 
         if dual_axes:
-            # ax.scatter(fbc_fbcm[i], delta_rot[i], marker=region_markers[i], 
-            #         label=region_names[i], facecolor='r',
-            #         alpha=0.35, edgecolor='none')
-            # ax.scatter(ffc_ffcm[i], delta_rot[i], marker=region_markers[i], 
-            #         label=region_names[i], facecolor='k',
-            #         alpha=0.35, edgecolor='none')
-
 
             ax.errorbar(fbc_fbcm_mean, delta_rot_mean, 
                       xerr=fbc_fbcm_std, yerr=delta_rot_std,
@@ -791,7 +646,7 @@ def plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, 
     print('Pearson r FFC/FFCm: ', scipy.stats.pearsonr(x_, y_))
     print('Spearman r FFC/FFCm: ', scipy.stats.spearmanr(x_, y_))
     fig.tight_layout()
-    fig.savefig(PATH_DICT['figs'] + '/fig6_justification_panel1.pdf', 
+    fig.savefig(PATH_DICT['figs'] + '/fig6_panel1.pdf', 
                 bbox_inches='tight', pad_inches=0)
 
     # Panel 2 - FFC/FFCm vs. delta dyn strength, rand offset true
@@ -800,29 +655,6 @@ def plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, 
     delta_dyn = [rot_dyn_results_dicts[i]['dyn_range_fcca'] - rot_dyn_results_dicts[i]['dyn_range_pca'] \
                  for i in range(len(regions))]
 
-    # Region elipses
-    def region_elipse(points, **plotting_kwargs):
-        mean = np.mean(points, axis=0)
-        cov = np.cov(points, rowvar=False)
-        
-        # Get eigenvalues and eigenvectors of the covariance matrix
-        eigenvals, eigenvecs = np.linalg.eigh(cov)
-        
-        # Sort eigenvalues and eigenvectors in descending order
-        idx = eigenvals.argsort()[::-1]
-        eigenvals = eigenvals[idx]
-        eigenvecs = eigenvecs[:, idx]
-        
-        # Calculate the angle of the ellipse
-        theta = np.arctan2(eigenvecs[1, 0], eigenvecs[0, 0])
-        
-        # Calculate the width and height of the ellipse (2 standard deviations)
-        width, height = 2 * np.sqrt(eigenvals)
-        
-        # Create the ellipse
-        ellipse = Ellipse(xy=mean, width=width, height=height, 
-                            angle=np.degrees(theta), **plotting_kwargs)
-        return ellipse
 
     for i in range(len(regions)):   
         # Calculate means and standard errors for each region
@@ -855,23 +687,6 @@ def plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, 
                       ecolor=(0., 0., 0., 0.5))
 
 
-            # ax.scatter(ffc_ffcm[i], delta_dyn[i], marker=region_markers[i], 
-            #             label=region_names[i], facecolor='k',
-            #             alpha=0.3, edgecolor='none')
-
-            # # Add an elipse that encompasses the mean and standard deviation along each axis
-            # # Calculate mean and covariance of the points
-            # points = np.column_stack((ffc_ffcm[i], delta_dyn[i]))
-            # ellipse = region_elipse(points, edgecolor='k', alpha=1.0, facecolor='none', linestyle='-')
-            # # Add the ellipse to the plot
-            # ax.add_patch(ellipse)
-            # ax.scatter(fbc_fbcm[i], delta_dyn[i], marker=region_markers[i], 
-            #             label=region_names[i], facecolor='r',
-            #             alpha=0.3, edgecolor='none')
-            # points = np.column_stack((fbc_fbcm[i], delta_dyn[i]))
-            # ellipse = region_elipse(points, edgecolor='r', alpha=1.0, facecolor='none', linestyle='-')
-            # # Add the ellipse to the plot
-            # ax.add_patch(ellipse)
         else:
             ax.scatter(ffc_ffcm[i], delta_dyn[i], marker=region_markers[i], 
                         label=region_names[i], color=region_colors_diff[i],
@@ -893,7 +708,7 @@ def plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, 
     ax.axhline(0, 0, np.pi/2, color='gray', linestyle='--')
 
     fig.tight_layout()
-    fig.savefig(PATH_DICT['figs'] + '/fig6_justification_panel2.pdf',
+    fig.savefig(PATH_DICT['figs'] + '/fig6_panel2.pdf',
                  bbox_inches='tight', pad_inches=0)
 
 
@@ -919,41 +734,8 @@ if __name__ == '__main__':
 
     #regions = ['M1', 'S1', 'M1_maze', 'HPC_peanut', 'AM', 'ML']
     regions = ['M1', 'S1', 'HPC_peanut', 'VISp']
-    dim_set = 0
     ss_angles_all, rot_dyn_results_dicts, dims, dim_delta_max = \
-        collate_fig6justification(regions, dim_set)
+        collate_fig6(regions)
 
-    plot_Fig6justification(regions, ss_angles_all, rot_dyn_results_dicts, dims, dim_delta_max, dual_axes=True)
-    sys.exit()
-    regions = ['M1', 'S1', 'HPC_peanut', 'VISp']
-
-    dyn_range_allf = []
-    dyn_range_allp = []
-    rot_allf = []
-    rot_allp = []
-
-    for region in tqdm(regions):
-        print(f"Starting region: {region}")
-
-        figpath = PATH_DICT['figs']
-        DIM = dim_dict[region]
-        df, session_key = load_decoding_df(region, **loader_kwargs[region])
-        data_path = get_data_path(region) 
-        rot_f, rot_p, dr_f, dr_p = plot_Fig6(df, session_key, 
-                                            data_path, region, DIM, figpath=figpath, rand_offset=False)
-
-        rot_allf.append(rot_f)
-        rot_allp.append(rot_p)
-
-        dyn_range_allf.append(dr_f)
-        dyn_range_allp.append(dr_p)
-
-        print(f"Done with region: {region}. Region stats: ")
-    
-    # Across area statistical tests    
-    # _, p1 = scipy.stats.mannwhitneyu(dyn_range_allf[0], dyn_range_allf[1], alternative='greater')
-    # _, p2 = scipy.stats.mannwhitneyu(dyn_range_allp[0], dyn_range_allp[1], alternative='greater')
-
-    # _, p3 = scipy.stats.mannwhitneyu(rot_allf[0], rot_allf[1], alternative='greater')
-    # _, p4 = scipy.stats.mannwhitneyu(rot_allp[0], rot_allp[1], alternative='greater')
+    plot_Fig6(regions, ss_angles_all, rot_dyn_results_dicts, dual_axes=True)
 

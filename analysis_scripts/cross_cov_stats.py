@@ -91,12 +91,7 @@ def get_cross_cov_stats(loadings_df,
 dim_dict = {
     'M1': 6,
     'S1': 6,
-    'M1_trialized':6,
     'HPC_peanut': 11,
-    'M1_maze':6,
-    'AM': 21,
-    'ML': 21,
-    'mPFC': 5,
     'VISp': 10
 }
 
